@@ -45,15 +45,15 @@ func (r *Rand) Uint32() uint32 {
 
 // Neuron is a neuron
 type Neuron struct {
-	Inputs  [2]float32
-	Output  float32
-	Weights [2]float32
-	Bias    float32
+	Inputs   [2]float32
+	Output   float32
+	Weights  [2]float32
+	DWeights [2]float32
 }
 
 // Inference computes the neuron
 func (n *Neuron) Inference() {
-	sum := n.Bias
+	sum := float32(0)
 	for i := range n.Weights {
 		sum += n.Weights[i] * n.Inputs[i]
 	}
@@ -90,11 +90,17 @@ func main() {
 			neurons[2].Inference()
 			for k := range neurons {
 				for l := range neurons[k].Inputs {
-					neurons[k].Weights[l] -= n * neurons[k].Inputs[l] * neurons[k].Output
+					neurons[k].DWeights[l] -= n * neurons[k].Inputs[l] * neurons[k].Output
 				}
 			}
 			diff := neurons[2].Output - xor[j][2]
 			cost += diff * diff
+		}
+		for k := range neurons {
+			for l := range neurons[k].DWeights {
+				neurons[k].Weights[l] += neurons[k].DWeights[l]
+				neurons[k].DWeights[l] = 0
+			}
 		}
 		fmt.Println(cost)
 	}
