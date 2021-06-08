@@ -47,18 +47,27 @@ func (r *Rand) Uint32() uint32 {
 type Neuron struct {
 	Inputs   [2]float32
 	Output   float32
+	Learn    float32
 	Weights  [2]float32
 	DWeights [2]float32
 }
 
 // Inference computes the neuron
 func (n *Neuron) Inference() {
-	sum := float32(0)
+	var sum, sumWeight, sumInput float32
 	for i := range n.Weights {
 		sum += n.Weights[i] * n.Inputs[i]
+		sumWeight += n.Weights[i]
+		sumInput += n.Inputs[i]
 	}
 	e := float32(math.Exp(float64(sum)))
-	n.Output = e / (e + 1)
+	i := float32(math.Exp(float64(-sum)))
+	n.Output = (e - i) / (e + i)
+
+	sum -= sumWeight * sumInput
+	e = float32(math.Exp(float64(sum)))
+	i = float32(math.Exp(float64(-sum)))
+	n.Learn = (e - i) / (e + i)
 }
 
 func main() {
@@ -70,13 +79,13 @@ func main() {
 	}
 
 	xor := [][]float32{
-		[]float32{0, 0, 0},
-		[]float32{1, 0, 1},
-		[]float32{0, 1, 1},
-		[]float32{1, 1, 0},
+		[]float32{-1, -1, -1},
+		[]float32{1, -1, 1},
+		[]float32{-1, 1, 1},
+		[]float32{1, 1, -1},
 	}
-	n := float32(.5)
-	for i := 0; i < 1024; i++ {
+	n := float32(.01)
+	for i := 0; i < 16; i++ {
 		cost := float32(0)
 		for j := range xor {
 			neurons[0].Inputs[0] = xor[j][0]
@@ -90,10 +99,11 @@ func main() {
 			neurons[2].Inference()
 			for k := range neurons {
 				for l := range neurons[k].Inputs {
-					neurons[k].DWeights[l] -= n * neurons[k].Inputs[l] * neurons[k].Output
+					neurons[k].DWeights[l] -= n * neurons[k].Inputs[l] * neurons[k].Learn
 				}
 			}
 			diff := neurons[2].Output - xor[j][2]
+			fmt.Println(neurons[2].Output, xor[j][2])
 			cost += diff * diff
 		}
 		for k := range neurons {
