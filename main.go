@@ -5,8 +5,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math"
+
+	"github.com/pointlander/datum/iris"
 )
 
 const (
@@ -14,6 +17,13 @@ const (
 	LFSRMask = 0x80000057
 	// LFSRInit is an initial LFSR state
 	LFSRInit = 0x55555555
+)
+
+var (
+	// FlagXOR xor flag
+	FlagXOR = flag.Bool("xor", false, "xor mode")
+	// FlagIRIS iris flag
+	FlagIRIS = flag.Bool("iris", false, "iris mode")
 )
 
 // Rand is a random number generator
@@ -77,6 +87,19 @@ func (n *Neuron) Inference() {
 }
 
 func main() {
+	flag.Parse()
+
+	if *FlagXOR {
+		XOR()
+		return
+	} else if *FlagIRIS {
+		IRIS()
+		return
+	}
+}
+
+// XOR mode
+func XOR() {
 	network := make([]Layer, 2)
 	network[0] = make([]Neuron, 2)
 	network[1] = make([]Neuron, 1)
@@ -131,5 +154,65 @@ func main() {
 			}
 		}
 		fmt.Println(cost)
+	}
+}
+
+// IRIS mode
+func IRIS() {
+	network := make([]Layer, 2)
+	network[0] = make([]Neuron, 4)
+	network[1] = make([]Neuron, 4)
+	g, factor := Rand(LFSRInit), float32(math.Sqrt(2/float64(2)))
+	for i := range network {
+		for j := range network[i] {
+			network[i][j].Inputs = make([]float32, 4)
+			network[i][j].Weights = make([]float32, 4)
+			network[i][j].DWeights = make([]float32, 4)
+			for k := range network[i][j].Weights {
+				network[i][j].Weights[k] = (2*g.Float32() - 1) * factor
+			}
+		}
+	}
+
+	datum, err := iris.Load()
+	if err != nil {
+		panic(err)
+	}
+
+	n := float32(.5)
+	for i := 0; i < 1; i++ {
+		for _, flower := range datum.Fisher {
+			for neuron := range network[0] {
+				for i, value := range flower.Measures {
+					network[0][neuron].Inputs[i] = float32(value)
+				}
+				network[0][neuron].Inference()
+			}
+			for neuron := range network[1] {
+				network[1][neuron].Inputs[0] = network[0][0].Output
+				network[1][neuron].Inputs[1] = network[0][1].Output
+				network[1][neuron].Inputs[2] = network[0][2].Output
+				network[1][neuron].Inputs[3] = network[0][3].Output
+				network[1][neuron].Inference()
+			}
+			for k := range network {
+				for l := range network[k] {
+					for m := range network[k][l].Inputs {
+						network[k][l].DWeights[m] -= n * network[k][l].Inputs[m] * network[k][l].Learn
+					}
+				}
+			}
+			fmt.Println(iris.Labels[flower.Label],
+				network[1][0].Output, network[1][1].Output,
+				network[1][2].Output, network[1][3].Output)
+		}
+		for k := range network {
+			for l := range network[k] {
+				for m := range network[k][l].Inputs {
+					network[k][l].Weights[m] += network[k][l].DWeights[m]
+					network[k][l].DWeights[m] = 0
+				}
+			}
+		}
 	}
 }
