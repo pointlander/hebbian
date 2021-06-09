@@ -45,12 +45,18 @@ func (r *Rand) Uint32() uint32 {
 
 // Neuron is a neuron
 type Neuron struct {
-	Inputs   [2]float32
+	Inputs   []float32
 	Output   float32
 	Learn    float32
-	Weights  [2]float32
-	DWeights [2]float32
+	Weights  []float32
+	DWeights []float32
 }
+
+// Layer is a neural network layer
+type Layer []Neuron
+
+// Layers is layers of networks
+type Layers []Layer
 
 // Inference computes the neuron
 func (n *Neuron) Inference() {
@@ -71,10 +77,18 @@ func (n *Neuron) Inference() {
 }
 
 func main() {
-	g, factor, neurons := Rand(LFSRInit), float32(math.Sqrt(2/float64(2))), make([]Neuron, 3)
-	for i := range neurons {
-		for j := range neurons[i].Weights {
-			neurons[i].Weights[j] = (2*g.Float32() - 1) * factor
+	network := make([]Layer, 2)
+	network[0] = make([]Neuron, 2)
+	network[1] = make([]Neuron, 1)
+	g, factor := Rand(LFSRInit), float32(math.Sqrt(2/float64(2)))
+	for i := range network {
+		for j := range network[i] {
+			network[i][j].Inputs = make([]float32, 2)
+			network[i][j].Weights = make([]float32, 2)
+			network[i][j].DWeights = make([]float32, 2)
+			for k := range network[i][j].Weights {
+				network[i][j].Weights[k] = (2*g.Float32() - 1) * factor
+			}
 		}
 	}
 
@@ -88,28 +102,32 @@ func main() {
 	for i := 0; i < 16; i++ {
 		cost := float32(0)
 		for j := range xor {
-			neurons[0].Inputs[0] = xor[j][0]
-			neurons[0].Inputs[1] = xor[j][1]
-			neurons[0].Inference()
-			neurons[1].Inputs[0] = xor[j][0]
-			neurons[1].Inputs[1] = xor[j][1]
-			neurons[1].Inference()
-			neurons[2].Inputs[0] = neurons[0].Output
-			neurons[2].Inputs[1] = neurons[1].Output
-			neurons[2].Inference()
-			for k := range neurons {
-				for l := range neurons[k].Inputs {
-					neurons[k].DWeights[l] -= n * neurons[k].Inputs[l] * neurons[k].Learn
+			network[0][0].Inputs[0] = xor[j][0]
+			network[0][0].Inputs[1] = xor[j][1]
+			network[0][0].Inference()
+			network[0][1].Inputs[0] = xor[j][0]
+			network[0][1].Inputs[1] = xor[j][1]
+			network[0][1].Inference()
+			network[1][0].Inputs[0] = network[0][0].Output
+			network[1][0].Inputs[1] = network[0][1].Output
+			network[1][0].Inference()
+			for k := range network {
+				for l := range network[k] {
+					for m := range network[k][l].Inputs {
+						network[k][l].DWeights[m] -= n * network[k][l].Inputs[m] * network[k][l].Learn
+					}
 				}
 			}
-			diff := neurons[2].Output - xor[j][2]
-			fmt.Println(neurons[2].Output, xor[j][2])
+			diff := network[1][0].Output - xor[j][2]
+			fmt.Println(network[1][0].Output, xor[j][2])
 			cost += diff * diff
 		}
-		for k := range neurons {
-			for l := range neurons[k].DWeights {
-				neurons[k].Weights[l] += neurons[k].DWeights[l]
-				neurons[k].DWeights[l] = 0
+		for k := range network {
+			for l := range network[k] {
+				for m := range network[k][l].Inputs {
+					network[k][l].Weights[m] += network[k][l].DWeights[m]
+					network[k][l].DWeights[m] = 0
+				}
 			}
 		}
 		fmt.Println(cost)
