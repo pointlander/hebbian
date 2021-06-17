@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"math/cmplx"
 
 	"github.com/pointlander/datum/iris"
 )
@@ -22,6 +23,8 @@ const (
 var (
 	// FlagXOR xor flag
 	FlagXOR = flag.Bool("xor", false, "xor mode")
+	// FlagQXOR xor flag
+	FlagQXOR = flag.Bool("qxor", false, "quantum xor mode")
 	// FlagIRIS iris flag
 	FlagIRIS = flag.Bool("iris", false, "iris mode")
 )
@@ -86,11 +89,47 @@ func (n *Neuron) Inference() {
 	n.Learn = (e - i) / (e + i)
 }
 
+// QuantumNeuron is a quantum neuron
+type QuantumNeuron struct {
+	Inputs   []complex64
+	Output   complex64
+	Learn    complex64
+	Weights  []complex64
+	DWeights []complex64
+}
+
+// QuantumLayer is a quantum neural network layer
+type QuantumLayer []QuantumNeuron
+
+// QuantumLayers is layers of quantum networks
+type QuantumLayers []QuantumLayer
+
+// Inference computes the neuron
+func (n *QuantumNeuron) Inference() {
+	var sum, sumWeight, sumInput complex64
+	for i := range n.Weights {
+		sum += n.Weights[i] * n.Inputs[i]
+		sumWeight += n.Weights[i]
+		sumInput += n.Inputs[i]
+	}
+	e := complex64(cmplx.Exp(complex128(sum)))
+	i := complex64(cmplx.Exp(complex128(-sum)))
+	n.Output = (e - i) / (e + i)
+
+	sum -= sumWeight * sumInput
+	e = complex64(cmplx.Exp(complex128(sum)))
+	i = complex64(cmplx.Exp(complex128(-sum)))
+	n.Learn = (e - i) / (e + i)
+}
+
 func main() {
 	flag.Parse()
 
 	if *FlagXOR {
 		XOR()
+		return
+	} else if *FlagQXOR {
+		QXOR()
 		return
 	} else if *FlagIRIS {
 		IRIS()
@@ -142,6 +181,65 @@ func XOR() {
 				}
 			}
 			diff := network[1][0].Output - xor[j][2]
+			fmt.Println(network[1][0].Output, xor[j][2])
+			cost += diff * diff
+		}
+		for k := range network {
+			for l := range network[k] {
+				for m := range network[k][l].Inputs {
+					network[k][l].Weights[m] += network[k][l].DWeights[m]
+					network[k][l].DWeights[m] = 0
+				}
+			}
+		}
+		fmt.Println(cost)
+	}
+}
+
+// QXOR mode
+func QXOR() {
+	network := make([]QuantumLayer, 2)
+	network[0] = make([]QuantumNeuron, 2)
+	network[1] = make([]QuantumNeuron, 1)
+	g, factor := Rand(LFSRInit), float32(math.Sqrt(2/float64(2)))
+	for i := range network {
+		for j := range network[i] {
+			network[i][j].Inputs = make([]complex64, 2)
+			network[i][j].Weights = make([]complex64, 2)
+			network[i][j].DWeights = make([]complex64, 2)
+			for k := range network[i][j].Weights {
+				network[i][j].Weights[k] = complex((2*g.Float32()-1)*factor, (2*g.Float32()-1)*factor)
+			}
+		}
+	}
+
+	xor := [][]complex64{
+		[]complex64{-1, -1, -1},
+		[]complex64{1, -1, 1},
+		[]complex64{-1, 1, 1},
+		[]complex64{1, 1, -1},
+	}
+	n := complex64(.01)
+	for i := 0; i < 16; i++ {
+		cost := float32(0)
+		for j := range xor {
+			network[0][0].Inputs[0] = xor[j][0]
+			network[0][0].Inputs[1] = xor[j][1]
+			network[0][0].Inference()
+			network[0][1].Inputs[0] = xor[j][0]
+			network[0][1].Inputs[1] = xor[j][1]
+			network[0][1].Inference()
+			network[1][0].Inputs[0] = network[0][0].Output
+			network[1][0].Inputs[1] = network[0][1].Output
+			network[1][0].Inference()
+			for k := range network {
+				for l := range network[k] {
+					for m := range network[k][l].Inputs {
+						network[k][l].DWeights[m] -= n * network[k][l].Inputs[m] * network[k][l].Learn
+					}
+				}
+			}
+			diff := float32(cmplx.Abs(complex128(network[1][0].Output - xor[j][2])))
 			fmt.Println(network[1][0].Output, xor[j][2])
 			cost += diff * diff
 		}
